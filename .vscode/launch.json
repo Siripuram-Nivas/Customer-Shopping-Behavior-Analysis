@@ -1,0 +1,55 @@
+{
+    "version": "0.2.0",
+    "compounds": [
+        {
+            "name": "▶ Run Full-Stack App (Backend + Frontend)",
+            "configurations": [
+                "Backend: FastAPI (Port 8000)",
+                "Frontend: React/Vite (Port 5173)",
+                "Browser: Open App"
+            ],
+            "stopAll": true
+        }
+    ],
+    "configurations": [
+        {
+            "name": "Backend: FastAPI (Port 8000)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "backend.main:app",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "8000",
+                "--reload"
+            ],
+            "jinja": true,
+            "justMyCode": true,
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Frontend: React/Vite (Port 5173)",
+            "type": "node",
+            "request": "launch",
+            "runtimeExecutable": "npm",
+            "runtimeArgs": [
+                "run",
+                "dev",
+                "--",
+                "--port",
+                "5173"
+            ],
+            "cwd": "${workspaceFolder}/frontend",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Browser: Open App",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:5173",
+            "webRoot": "${workspaceFolder}/frontend"
+        }
+    ]
+}
