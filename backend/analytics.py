@@ -22,7 +22,7 @@ def compute_column_statistics(df: pd.DataFrame, col: str) -> ColumnStatistics:
     count = len(series)
     unique_count = int(series.nunique())
 
-    if np.issubdtype(series.dtype, np.number):
+    if pd.api.types.is_numeric_dtype(series.dtype):
         mean_val = float(series.mean())
         median_val = float(series.median())
         std_val = float(series.std()) if count > 1 else 0.0
@@ -90,6 +90,58 @@ def safe_value_counts(df: pd.DataFrame, col: str) -> List[Dict[str, Any]]:
         return []
     res = df[col].value_counts(normalize=True).mul(100).round(2)
     return [{"label": str(k), "value": float(v)} for k, v in res.items()]
+
+
+def compute_correlation_data(
+    df: pd.DataFrame,
+) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    derived_flags = {
+        "Subscribed": "Subscription Status",
+        "Discount_Flag": "Discount Applied",
+        "Promo_Flag": "Promo Code Used",
+    }
+    correlation_df = df
+    if any(target not in df.columns and source in df.columns for target, source in derived_flags.items()):
+        correlation_df = df.copy()
+        for target, source in derived_flags.items():
+            if target not in correlation_df and source in correlation_df:
+                correlation_df[target] = (
+                    correlation_df[source].str.lower() == "yes"
+                ).astype(int)
+
+    corr_cols = [
+        "Age",
+        "Purchase Amount",
+        "Review Rating",
+        "Previous Purchases",
+        "Subscribed",
+        "Discount_Flag",
+        "Promo_Flag",
+    ]
+    available_corr_cols = [col for col in corr_cols if col in correlation_df.columns]
+    correlation_matrix: Dict[str, Any] = {"columns": [], "matrix": []}
+    correlation_with_subscription: List[Dict[str, Any]] = []
+
+    if len(available_corr_cols) > 1:
+        corr_df = correlation_df[available_corr_cols].corr().fillna(0)
+        correlation_matrix["columns"] = available_corr_cols
+        correlation_matrix["matrix"] = [
+            [round(float(corr_df.loc[row, col]), 3) for col in available_corr_cols]
+            for row in available_corr_cols
+        ]
+        if "Subscribed" in corr_df.columns:
+            sub_corr = (
+                corr_df["Subscribed"]
+                .drop("Subscribed")
+                .sort_values(key=np.abs, ascending=False)
+                .reset_index()
+            )
+            sub_corr.columns = ["Feature", "Correlation"]
+            sub_corr["Correlation"] = sub_corr["Correlation"].round(3)
+            correlation_with_subscription = sub_corr.to_dict(orient="records")
+
+    return correlation_matrix, correlation_with_subscription
+
 
 def compute_dashboard_data(df: pd.DataFrame, full_df: pd.DataFrame) -> DashboardResponse:
     if df.empty:
@@ -208,23 +260,7 @@ def compute_dashboard_data(df: pd.DataFrame, full_df: pd.DataFrame) -> Dashboard
         location_analysis = loc_df.sort_values("Revenue", ascending=False).head(10).to_dict(orient="records")
 
     # 6. Relationships (Correlation)
-    corr_matrix_data = {"columns": [], "matrix": []}
-    corr_with_sub = []
-    corr_cols = ["Age", "Purchase Amount", "Review Rating", "Previous Purchases", "Subscribed", "Discount_Flag", "Promo_Flag"]
-    available_corr_cols = [c for c in corr_cols if c in df.columns]
-    
-    if len(available_corr_cols) > 1:
-        corr_df = df[available_corr_cols].corr().fillna(0)
-        corr_matrix_data["columns"] = available_corr_cols
-        corr_matrix_data["matrix"] = [
-            [round(float(corr_df.loc[r, c]), 3) for c in available_corr_cols]
-            for r in available_corr_cols
-        ]
-        if "Subscribed" in corr_df.columns:
-            sub_corr = corr_df["Subscribed"].drop("Subscribed").sort_values(key=np.abs, ascending=False).reset_index()
-            sub_corr.columns = ["Feature", "Correlation"]
-            sub_corr["Correlation"] = sub_corr["Correlation"].round(3)
-            corr_with_sub = sub_corr.to_dict(orient="records")
+    corr_matrix_data, corr_with_sub = compute_correlation_data(df)
 
     # 7. Segmentation (K-Means)
     segment_profile = []

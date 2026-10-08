@@ -13,25 +13,32 @@ import { ClayCard } from "../components/clay/ClayCard";
 import { ClaySelect } from "../components/clay/ClayInput";
 import { ClayBadge } from "../components/clay/ClayBadge";
 import { ClayChartCard } from "../components/clay/ClayBadge";
-import { fetchStatistics, fetchDashboard, fetchFocusFeatureStats } from "../services/api";
+import {
+  fetchStatistics,
+  fetchFocusFeatureStats,
+  type ColumnStatistics,
+  type StatisticsResponse,
+} from "../services/api";
 
 export const StatisticsEDAPage: React.FC = () => {
-  const [stats, setStats] = useState<any[]>([]);
-  const [dashboard, setDashboard] = useState<any>(null);
+  const [stats, setStats] = useState<ColumnStatistics[]>([]);
+  const [correlationMatrix, setCorrelationMatrix] =
+    useState<StatisticsResponse["correlation_matrix"] | null>(null);
   const [selectedFeature, setSelectedFeature] = useState<string>("Age");
   const [focusData, setFocusData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([fetchStatistics(), fetchDashboard()])
-      .then(([s, d]) => {
-        setStats(s.statistics || []);
-        setDashboard(d);
-        if (s.statistics?.length > 0) {
-          setSelectedFeature(s.statistics[0].feature);
-        }
+    fetchStatistics()
+      .then((s) => {
+        setStats(s.statistics);
+        setCorrelationMatrix(s.correlation_matrix);
       })
-      .catch(console.error)
+      .catch((error: unknown) => {
+        console.error(error);
+        setLoadError(error instanceof Error ? error.message : "Unable to load EDA data.");
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -42,7 +49,6 @@ export const StatisticsEDAPage: React.FC = () => {
       .then(setFocusData)
       .catch(console.error);
   }, [selectedFeature]);
-
   const activeStat = stats.find((s) => s.feature === selectedFeature) || stats[0];
 
   return (
@@ -67,6 +73,17 @@ export const StatisticsEDAPage: React.FC = () => {
         </div>
       </div>
 
+      {loading && (
+        <p role="status" className="text-sm text-[#64748B]">
+          Loading descriptive statistics and correlations…
+        </p>
+      )}
+      {loadError && (
+        <p role="alert" className="rounded-xl border border-[#FECACA] bg-[#FEF2F2] p-4 text-sm text-[#991B1B]">
+          Could not load EDA data: {loadError}
+        </p>
+      )}
+
       {/* Feature Deep Dive Metrics Card */}
       {activeStat && (
         <ClayCard className="p-6 space-y-6">
@@ -77,12 +94,12 @@ export const StatisticsEDAPage: React.FC = () => {
                 Univariate Profile: {activeStat.feature}
               </h2>
             </div>
-            <ClayBadge variant={activeStat.mean !== undefined ? "teal" : "coral"}>
-              {activeStat.mean !== undefined ? "Continuous / Numeric" : "Categorical / Discrete"}
+            <ClayBadge variant={typeof activeStat.mean === "number" ? "teal" : "coral"}>
+              {typeof activeStat.mean === "number" ? "Continuous / Numeric" : "Categorical / Discrete"}
             </ClayBadge>
           </div>
 
-          {activeStat.mean !== undefined ? (
+          {typeof activeStat.mean === "number" ? (
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
               <div className="p-3 rounded-xl bg-[#FAF8F5] border border-[#E0D7C9] text-center">
                 <span className="text-[10px] font-bold text-[#64748B] uppercase">Mean ($\mu$)</span>
@@ -174,7 +191,7 @@ export const StatisticsEDAPage: React.FC = () => {
                   <BarChart data={activeStat.distribution} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#E5DFD5" vertical={false} />
                     <XAxis
-                      dataKey={activeStat.mean !== undefined ? "range" : "label"}
+                      dataKey={typeof activeStat.mean === "number" ? "range" : "label"}
                       tick={{ fill: "#64748B", fontSize: 11 }}
                       interval={0}
                       angle={-25}
@@ -240,7 +257,7 @@ export const StatisticsEDAPage: React.FC = () => {
       )}
 
       {/* Correlation Heatmap Card */}
-      {dashboard?.correlation_matrix?.columns?.length > 0 && (
+      {correlationMatrix && correlationMatrix.columns.length > 0 && (
         <ClayCard className="p-6 space-y-4">
           <div className="flex items-center space-x-2">
             <Grid size={18} className="text-[#4F46E5]" />
@@ -257,18 +274,18 @@ export const StatisticsEDAPage: React.FC = () => {
               <thead className="bg-[#EDE7DD] text-[#475569] font-bold">
                 <tr>
                   <th className="px-3 py-2.5 text-left">Feature</th>
-                  {dashboard.correlation_matrix.columns.map((c: string) => (
+                  {correlationMatrix.columns.map((c) => (
                     <th key={c} className="px-3 py-2.5 whitespace-nowrap">{c}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E0D7C9]/60 bg-[#FAF8F5]">
-                {dashboard.correlation_matrix.columns.map((rowName: string, rIdx: number) => (
+                {correlationMatrix.columns.map((rowName, rIdx) => (
                   <tr key={rowName}>
                     <td className="px-3 py-2 font-bold text-left text-[#1E293B] whitespace-nowrap bg-[#F2ECE1]">
                       {rowName}
                     </td>
-                    {dashboard.correlation_matrix.matrix[rIdx].map((val: number, cIdx: number) => {
+                    {correlationMatrix.matrix[rIdx].map((val, cIdx) => {
                       const isSelf = rIdx === cIdx;
                       const intensity = Math.abs(val);
                       const bg = isSelf

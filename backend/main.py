@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.analytics import (
     compute_column_statistics,
+    compute_correlation_data,
     compute_dashboard_data,
 )
 from backend.config import ALLOWED_FEATURES, NUMERICAL_FEATURES, CATEGORICAL_FEATURES
@@ -195,8 +196,13 @@ def prepare_data(req: DataPrepRequest) -> Dict[str, Any]:
 @app.post("/api/statistics")
 def get_all_statistics(filters: Optional[DataFilterRequest] = None) -> Dict[str, Any]:
     df = data_manager.apply_filters(filters)
+    correlation_matrix, _ = compute_correlation_data(df)
     if df.empty:
-        return {"statistics": [], "record_count": 0}
+        return {
+            "statistics": [],
+            "record_count": 0,
+            "correlation_matrix": correlation_matrix,
+        }
 
     stats = []
     # Iterate all analytical columns actually present in the dataframe
@@ -205,7 +211,11 @@ def get_all_statistics(filters: Optional[DataFilterRequest] = None) -> Dict[str,
             col_stat = compute_column_statistics(df, col)
             stats.append(col_stat.model_dump())
 
-    return {"statistics": stats, "record_count": len(df)}
+    return {
+        "statistics": stats,
+        "record_count": len(df),
+        "correlation_matrix": correlation_matrix,
+    }
 
 
 @app.get("/api/statistics/column/{column_name}", response_model=ColumnStatistics)

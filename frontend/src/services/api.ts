@@ -3,7 +3,7 @@
 // All 18 analytical columns are exposed; no five-feature restriction.
 // ============================================================
 
-export const API_BASE = "http://localhost:8000/api";
+export const API_BASE = "http://127.0.0.1:8000/api";
 
 // Complete analytical feature list (matches backend ALLOWED_FEATURES)
 export const ALLOWED_FEATURES = [
@@ -66,6 +66,38 @@ export interface DatasetSchema {
   total_analytical_features: number;
   numerical_features: string[];
   categorical_features: string[];
+}
+
+export interface ColumnStatistics {
+  feature: string;
+  count: number;
+  unique_count: number;
+  mean?: number | null;
+  median?: number | null;
+  std?: number | null;
+  variance?: number | null;
+  min?: number | null;
+  max?: number | null;
+  q25?: number | null;
+  q75?: number | null;
+  iqr?: number | null;
+  skewness?: number | null;
+  mode?: number | string | null;
+  distribution?: Array<{
+    range?: string;
+    label?: string;
+    count: number;
+    percentage?: number;
+  }> | null;
+}
+
+export interface StatisticsResponse {
+  statistics: ColumnStatistics[];
+  record_count: number;
+  correlation_matrix: {
+    columns: string[];
+    matrix: number[][];
+  };
 }
 
 // ============================================================
@@ -231,13 +263,13 @@ export async function fetchDashboard(filters?: DataFilters): Promise<DashboardDa
   return handleResponse<DashboardData>(res);
 }
 
-export async function fetchStatistics(filters?: DataFilters) {
+export async function fetchStatistics(filters?: DataFilters): Promise<StatisticsResponse> {
   const res = await fetch(`${API_BASE}/statistics`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(filters || {}),
   });
-  return handleResponse<Record<string, unknown>>(res);
+  return handleResponse<StatisticsResponse>(res);
 }
 
 export async function fetchFocusFeatureStats(feature: string, filters?: DataFilters) {
