@@ -165,7 +165,7 @@ export const PresentationPage: React.FC = () => {
           <div className="space-y-2">
             <div className="flex items-center space-x-2 text-xs font-semibold text-[#1E293B]">
               <CheckCircle2 size={16} className="text-[#10B981]" />
-              <span>100% Independent React/Vite UI & FastAPI backend (Zero Streamlit dependency).</span>
+              <span>Independent React/Vite UI & FastAPI backend.</span>
             </div>
             <div className="flex items-center space-x-2 text-xs font-semibold text-[#1E293B]">
               <CheckCircle2 size={16} className="text-[#10B981]" />

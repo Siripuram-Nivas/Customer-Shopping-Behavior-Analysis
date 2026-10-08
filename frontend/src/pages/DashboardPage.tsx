@@ -293,9 +293,9 @@ export const DashboardPage: React.FC = () => {
                     <YAxis tick={{ fill: "#64748B", fontSize: 11 }} />
                     <Tooltip
                       contentStyle={TOOLTIP_STYLE}
-                      formatter={(val: any, name: string) => [
+                      formatter={(val, name) => [
                         `$${Number(val).toLocaleString()}`,
-                        name === "Total_Revenue" ? "Total Revenue" : "Avg Spend",
+                        (name ?? "") === "Total_Revenue" ? "Total Revenue" : "Avg Spend",
                       ]}
                     />
                     <Bar dataKey="Total_Revenue" fill="#4F46E5" radius={[8, 8, 0, 0]} name="Total Revenue" />
@@ -386,10 +386,13 @@ export const DashboardPage: React.FC = () => {
                   <YAxis tick={{ fill: "#64748B", fontSize: 11 }} />
                   <Tooltip
                     contentStyle={TOOLTIP_STYLE}
-                    formatter={(val: any, name: string) => [
-                      name.includes("Rate") ? `${val}%` : `$${val}`,
-                      name,
-                    ]}
+                    formatter={(val, name) => {
+                      const label = name == null ? "" : String(name);
+                      return [
+                        label.includes("Rate") ? `${val}%` : `$${val}`,
+                        label,
+                      ];
+                    }}
                   />
                   <Line
                     type="monotone"

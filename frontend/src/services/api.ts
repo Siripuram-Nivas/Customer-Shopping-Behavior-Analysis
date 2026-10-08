@@ -3,7 +3,9 @@
 // All 18 analytical columns are exposed; no five-feature restriction.
 // ============================================================
 
-export const API_BASE = "http://127.0.0.1:8000/api";
+export const API_BASE = (
+  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api"
+).replace(/\/+$/, "");
 
 // Complete analytical feature list (matches backend ALLOWED_FEATURES)
 export const ALLOWED_FEATURES = [
@@ -66,6 +68,28 @@ export interface DatasetSchema {
   total_analytical_features: number;
   numerical_features: string[];
   categorical_features: string[];
+}
+
+export interface DatasetPreviewResponse {
+  total_records: number;
+  filtered_records: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+  columns: string[];
+  records: Array<Record<string, unknown>>;
+}
+
+export interface DatasetUploadResponse {
+  status: string;
+  message: string;
+  records: number;
+}
+
+export interface ResponsibleAIData {
+  high_value_rate_by_gender: Record<string, number>;
+  leakage_safeguards: string[];
+  privacy_compliance: string[];
 }
 
 export interface ColumnStatistics {
@@ -208,7 +232,7 @@ export async function fetchDatasetPreview(
   sortBy?: string,
   sortDir: string = "asc",
   filters?: DataFilters
-) {
+): Promise<DatasetPreviewResponse> {
   const params = new URLSearchParams({
     page: page.toString(),
     page_size: pageSize.toString(),
@@ -222,7 +246,7 @@ export async function fetchDatasetPreview(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(filters || {}),
   });
-  return handleResponse<Record<string, unknown>>(res);
+  return handleResponse<DatasetPreviewResponse>(res);
 }
 
 export async function resetDataset() {
@@ -230,14 +254,68 @@ export async function resetDataset() {
   return handleResponse<Record<string, unknown>>(res);
 }
 
-export async function uploadDataset(file: File) {
+export async function uploadDataset(file: File): Promise<DatasetUploadResponse> {
   const formData = new FormData();
   formData.append("file", file);
   const res = await fetch(`${API_BASE}/dataset/upload`, {
     method: "POST",
     body: formData,
   });
-  return handleResponse<Record<string, unknown>>(res);
+  return handleResponse<DatasetUploadResponse>(res);
+}
+
+export async function fetchResponsibleAI(): Promise<ResponsibleAIData> {
+  const firstPage = await fetchDatasetPreview(1, 100);
+  const remainingPages = await Promise.all(
+    Array.from({ length: Math.max(0, firstPage.total_pages - 1) }, (_, index) =>
+      fetchDatasetPreview(index + 2, 100)
+    )
+  );
+  const records = [firstPage, ...remainingPages].flatMap((page) => page.records);
+  const customers = records.flatMap((record) => {
+    const gender = record.Gender;
+    const amount = record["Purchase Amount"];
+    if (typeof gender !== "string" || typeof amount !== "number") return [];
+    return [{ gender, amount }];
+  });
+
+  const sortedAmounts = customers
+    .map(({ amount }) => amount)
+    .sort((left, right) => left - right);
+  const quantilePosition = (sortedAmounts.length - 1) * 0.75;
+  const lowerIndex = Math.floor(quantilePosition);
+  const upperIndex = Math.ceil(quantilePosition);
+  const quantileFraction = quantilePosition - lowerIndex;
+  const highValueThreshold =
+    sortedAmounts.length === 0
+      ? Number.POSITIVE_INFINITY
+      : sortedAmounts[lowerIndex] * (1 - quantileFraction) +
+        sortedAmounts[upperIndex] * quantileFraction;
+
+  const totalsByGender = new Map<string, { total: number; highValue: number }>();
+  for (const { gender, amount } of customers) {
+    const totals = totalsByGender.get(gender) ?? { total: 0, highValue: 0 };
+    totals.total += 1;
+    if (amount >= highValueThreshold) totals.highValue += 1;
+    totalsByGender.set(gender, totals);
+  }
+
+  return {
+    high_value_rate_by_gender: Object.fromEntries(
+      [...totalsByGender].map(([gender, totals]) => [
+        gender,
+        Math.round((totals.highValue / totals.total) * 1000) / 10,
+      ])
+    ),
+    leakage_safeguards: [
+      "High-value labels are defined by the 75th percentile of purchase amount.",
+      "Customer identifiers are excluded from the analytical feature set.",
+    ],
+    privacy_compliance: [
+      "Customer IDs are excluded from dataset previews and analytical features.",
+      "Demographic results are reported as aggregated group-level rates.",
+    ],
+  };
 }
 
 export async function prepareDataset(options: {
